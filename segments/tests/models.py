@@ -25,6 +25,9 @@ class SegmentableUser(AbstractUser, SegmentMixin):
     objects = SegmentableUserManager()
     special = OtherSegmentableUserManager()
 
+    class Meta:
+        managed = False
+
 
 related_names_for = ('groups', 'user_permissions')
 for field_name in related_names_for:
