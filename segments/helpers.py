@@ -26,19 +26,17 @@ class SegmentHelper(object):
         return self.__redis
 
     def segment_has_member(self, segment_id, user_id):
-        user_key = self.segment_member_key % user_id
+        segment_key = self.segment_key % segment_id
         exists = False
         try:
-            exists = self.redis.sismember(user_key, segment_id)
+            exists = self.redis.sismember(segment_key, user_id)
         except Exception as e:
             logger.info('SEGMENTS: segment_has_member(%s, %s): %s' % (segment_id, user_id, e))
         return exists
 
     def add_segment_membership(self, segment_id, user_id):
-        user_key = self.segment_member_key % user_id
         live_key = self.segment_key % segment_id
         try:
-            self.redis.sadd(user_key, segment_id)
             self.redis.sadd(live_key, user_id)
             self.redis.sadd(self.segment_member_refresh_key, user_id)
         except Exception as e:
@@ -47,25 +45,14 @@ class SegmentHelper(object):
         return True
 
     def remove_segment_membership(self, segment_id, user_id):
-        user_key = self.segment_member_key % user_id
         live_key = self.segment_key % segment_id
         try:
-            self.redis.srem(user_key, segment_id)
             self.redis.srem(live_key, user_id)
             self.redis.sadd(self.segment_member_refresh_key, user_id)
         except Exception as e:
             logger.info('SEGMENTS: remove_segment_membership(%s, %s): %s' % (segment_id, user_id, e))
             return False
         return True
-
-    def get_user_segments(self, user_id):
-        user_key = self.segment_member_key % user_id
-        items = []
-        try:
-            items = self.redis.smembers(user_key)
-        except Exception as e:
-            logger.info('SEGMENTS: get_user_segments(%s): %s' % (user_id, e))
-        return items
 
     def get_segment_membership_count(self, segment_id):
         live_key = self.segment_key % segment_id
@@ -108,12 +95,9 @@ class SegmentHelper(object):
         self.redis.sinterstore(live_key, add_key)
 
         # Sync the segment for new members
-        for user_id in self.redis.sscan_iter(new_key):
-            self.add_segment_membership(segment_id, user_id)
 
         # Sync the segment for deleted members
-        for user_id in self.redis.sscan_iter(del_key):
-            self.remove_segment_membership(segment_id, user_id)
+        self.redis.srem(live_key, self.redis.smembers(del_key))
 
         # Cleanup the sets
         for key in (add_key, del_key, new_key):
